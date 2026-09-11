@@ -8,14 +8,14 @@ def main():
     from matplotlib import font_manager
 
     # ============================================================
-    # Grouped (2-group) Relative-threshold Monte Carlo simulation
-    #   - Two groups differ in lambda range (fatigue -> error sensitivity)
-    #   - For each group, relative threshold theta_g is calibrated from:
-    #       baseline None scenario's busy-window fatigue pooled (i,t), P90
-    #   - Then evaluate None vs A+B+C within the SAME group using theta_g
-    #   - Output:
-    #       - Figure 6: group x {None, A+B+C} mean fatigue (busy window) with 95% CI
-    #       - Table 4:  group-wise risk reduction (relative threshold) + mean fatigue
+    # グループ別（2群）相対閾値モンテカルロ・シミュレーション
+    #   - 2群はλ（疲弊→過誤感受性）の範囲が異なる
+    #   - 各群について、相対閾値 theta_g を次のように校正する：
+    #       基準シナリオ（None）における繁忙期疲弊のプール（i,t）分布のP90
+    #   - その後、同一群内で theta_g を用いて None と A+B+C を比較評価する
+    #   - 出力：
+    #       - 図6：群×{None, A+B+C} の平均疲弊（繁忙期ウィンドウ、95%区間付き）
+    #       - 表4：群別のリスク低減率（相対閾値）＋平均疲弊
     # ============================================================
 
     # =========================
@@ -111,9 +111,14 @@ def main():
 
     # =========================
     # Parameter sampling
+    #
+    # rho_lo/rho_hi を引数として追加。
+    # rho・lambda ともに、準安定領域 rho + beta*lambda < STABILITY_MARGIN
+    # を満たすようクリップする。
     # =========================
-    def sample_params(n, rng, lam_lo, lam_hi):
-        rho   = rng.uniform(0.70, 0.90, n)
+    def sample_params(n, rng, lam_lo, lam_hi, rho_lo=0.70, rho_hi=0.90):
+        rho   = rng.uniform(rho_lo, rho_hi, n)
+        rho   = np.clip(rho, None, STABILITY_MARGIN)  # <-- 追加：rho自体もキャップ
         alpha = rng.uniform(0.80, 1.20, n)
         beta  = rng.uniform(0.80, 1.20, n)
         gamma = rng.uniform(0.50, 1.00, n)
@@ -156,10 +161,15 @@ def main():
     # One simulation run
     # =========================
     def simulate_one(mode, rng, group_cfg):
+        # group_cfg には任意で "rho_lo"/"rho_hi" を含めてよい（指定がなければ
+        # sample_params の既定値 0.70/0.90 を使う）。これにより、今後グループ
+        # ごとに rho を変動させる分析を行う場合にも対応できる。
         rho, alpha, beta, gamma, kappa, lam = sample_params(
             N, rng,
             lam_lo=group_cfg["lam_lo"],
-            lam_hi=group_cfg["lam_hi"]
+            lam_hi=group_cfg["lam_hi"],
+            rho_lo=group_cfg.get("rho_lo", 0.70),
+            rho_hi=group_cfg.get("rho_hi", 0.90),
         )
 
         F = np.zeros((N, T), dtype=float)

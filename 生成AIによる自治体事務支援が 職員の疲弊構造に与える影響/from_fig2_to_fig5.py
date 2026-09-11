@@ -6,11 +6,11 @@ def main():
     import matplotlib.pyplot as plt
 
     # ============================================================
-    # Relative-threshold Monte Carlo simulation (busy-window basis)
-    #   - Threshold THETA is calibrated from baseline (None) scenario
-    #     as a chosen percentile of the baseline busy-window fatigue.
-    #   - Then all scenarios are evaluated using the SAME THETA.
-    #   - Model implements the coupled system:
+    # 相対閾値モンテカルロ・シミュレーション（繁忙期ウィンドウ基準）
+    #   - 閾値THETAは、基準シナリオ（AI支援なし=None）における繁忙期疲弊
+    #     分布の、あらかじめ指定したパーセンタイル値として校正する。
+    #   - その後、すべてのシナリオを同一のTHETAを用いて評価する。
+    #   - モデルは以下の連成系として実装される：
     #       E_{i,t} = kappa_i W_t + lambda_i F_{i,t} + epsE
     #       F_{i,t+1} = rho_i F_{i,t} + alpha_i W_t + beta_i E_{i,t} - gamma_i R_t + epsF
     # ============================================================
@@ -41,20 +41,24 @@ def main():
 
     # =========================
     # Parameter sampling
-    # NOTE: choose lambda range to satisfy stability (rho + beta*lambda < 1)
-    # so dynamics do not explode.
+    #
+    # rho_lo/rho_hi/lam_lo/lam_hi はハードコードせず引数として外出しした。
+    # rho・lambda ともに、準安定領域 rho + beta*lambda < STABILITY_MARGIN
+    # を満たすようクリップする。
     # =========================
-    def sample_params(n, rng):
-        rho   = rng.uniform(0.70, 0.90, n)
+    def sample_params(n, rng, rho_lo=0.70, rho_hi=0.90, lam_lo=0.02, lam_hi=0.08):
+        STABILITY_MARGIN = 0.95
+
+        rho   = rng.uniform(rho_lo, rho_hi, n)
+        rho   = np.clip(rho, None, STABILITY_MARGIN)  # <-- 追加：lambdaだけでなくrho自体もキャップ
         alpha = rng.uniform(0.80, 1.20, n)
         beta  = rng.uniform(0.80, 1.20, n)
         gamma = rng.uniform(0.50, 1.00, n)
 
         kappa = rng.uniform(0.10, 0.20, n)
-        lam   = rng.uniform(0.02, 0.08, n)   # stability-friendly range
+        lam   = rng.uniform(lam_lo, lam_hi, n)   # stability-friendly range
 
         #stability control
-        STABILITY_MARGIN = 0.95
         lam_cap = (STABILITY_MARGIN - rho) / np.maximum(beta, 1e-9)
         lam_cap = np.clip(lam_cap, 0.0, None)
         lam = np.minimum(lam, lam_cap)
@@ -91,8 +95,11 @@ def main():
     # =========================
     # One simulation run (one replicate)
     # =========================
-    def simulate_one(mode, rng):
-        rho, alpha, beta, gamma, kappa, lam = sample_params(N, rng)
+    def simulate_one(mode, rng, rho_lo=0.70, rho_hi=0.90, lam_lo=0.02, lam_hi=0.08):
+        # rho_lo/rho_hi/lam_lo/lam_hi は sample_params にそのまま渡す。これにより
+        # 感度分析スクリプト側でこれらの範囲を（例えば±20%）変動させても、
+        # sample_params 内の rho・Lambda の安定性クリッピングを必ず経由する。
+        rho, alpha, beta, gamma, kappa, lam = sample_params(N, rng, rho_lo, rho_hi, lam_lo, lam_hi)
 
         F = np.zeros((N, T), dtype=float)
         F[:, 0] = np.clip(rng.normal(50, 10, size=N), 0, None)
